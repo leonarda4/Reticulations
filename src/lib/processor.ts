@@ -186,7 +186,7 @@ function drawParallel(ctx: CanvasRenderingContext2D, size: number, fgColor?: str
   ];
   lines.forEach(line => {
     ctx.lineWidth = line.width * scaleX;
-    ctx.beginPath();
+    ctx.beginPath(); 
     ctx.moveTo(line.x * scaleX, line.y1 * scaleY);
     ctx.lineTo(line.x * scaleX, line.y2 * scaleY);
     ctx.stroke();

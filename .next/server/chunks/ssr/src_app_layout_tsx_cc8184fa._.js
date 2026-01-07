@@ -1,0 +1,3 @@
+module.exports=[27572,a=>{"use strict";var b=a.i(7997);function c({children:a}){return(0,b.jsx)("html",{lang:"en",className:"dark",children:(0,b.jsx)("body",{className:"font-sans",children:a})})}a.s(["default",()=>c,"metadata",0,{title:"Reticulations",description:"Image processing app",icons:{icon:"/assets/logo.svg"},openGraph:{images:"/assets/logo.svg"},twitter:{card:"summary_large_image",images:"/assets/logo.svg"}}])}];
+
+//# sourceMappingURL=src_app_layout_tsx_cc8184fa._.js.map

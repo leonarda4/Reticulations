@@ -64,8 +64,7 @@ function processImage(sourceCanvas, targetCanvas, settings) {
             if (settings.uniformSize) {
                 size = adjustedBrightness > 128 ? maxSize : 0;
             } else {
-                const normalizedBrightness = (255 - adjustedBrightness) / 255;
-                size = Math.pow(normalizedBrightness, 0.5) * maxSize;
+                size = (255 - adjustedBrightness) / 255 * maxSize;
             }
             size *= 1 + settings.overlap;
             if (size > 0) {

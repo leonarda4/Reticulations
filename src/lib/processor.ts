@@ -20,6 +20,8 @@ export interface ProcessorSettings {
   invert: boolean;
   uniformSize: boolean;
   overlap: number;
+  edgeDetection?: boolean;
+  sensitivity?: number;
 }
 
 export function processImage(sourceCanvas: HTMLCanvasElement, targetCanvas: HTMLCanvasElement, settings: ProcessorSettings) {
@@ -51,6 +53,9 @@ export function processImage(sourceCanvas: HTMLCanvasElement, targetCanvas: HTML
       const imageData = sourceCtx.getImageData(x, y, cellWidth, cellHeight);
       const data = imageData.data;
       let total = 0;
+      let edgeStrength = 0;
+
+      // Calculate average brightness
       for (let k = 0; k < data.length; k += 4) {
         const r = data[k];
         const g = data[k + 1];
@@ -58,8 +63,32 @@ export function processImage(sourceCanvas: HTMLCanvasElement, targetCanvas: HTML
         const brightness = (r + g + b) / 3;
         total += brightness;
       }
+
       const avgBrightness = total / (data.length / 4);
+
+      // Optional edge detection for better feature adaptation
+      if (settings.edgeDetection) {
+        // Detect edges by measuring variance in the cell
+        for (let k = 0; k < data.length; k += 4) {
+          const r = data[k];
+          const g = data[k + 1];
+          const b = data[k + 2];
+          const brightness = (r + g + b) / 3;
+          const diff = Math.abs(brightness - avgBrightness);
+          edgeStrength += diff;
+        }
+        edgeStrength = edgeStrength / (data.length / 4);
+      }
+
       let adjustedBrightness = Math.pow(avgBrightness / 255, 1 / settings.contrast) * 255;
+
+      // Blend edge detection with brightness for more dynamic feature adaptation
+      if (settings.edgeDetection && edgeStrength > 0) {
+        const sensitivity = settings.sensitivity ?? 1;
+        adjustedBrightness = adjustedBrightness * 0.7 + (edgeStrength * sensitivity) * 0.3;
+        adjustedBrightness = Math.min(255, adjustedBrightness);
+      }
+
       if (settings.invert) {
         adjustedBrightness = 255 - adjustedBrightness;
       }
@@ -71,6 +100,7 @@ export function processImage(sourceCanvas: HTMLCanvasElement, targetCanvas: HTML
         size = ((255 - adjustedBrightness) / 255) * maxSize;
       }
       size *= (1 + settings.overlap);
+      if (size < 0) size = 0;
 
       if (size > 0) {
         targetCtx.fillStyle = settings.fgColor;
@@ -186,10 +216,14 @@ function drawParallel(ctx: CanvasRenderingContext2D, size: number, fgColor?: str
   ];
   lines.forEach(line => {
     ctx.lineWidth = line.width * scaleX;
-    ctx.beginPath(); 
+    ctx.beginPath();
     ctx.moveTo(line.x * scaleX, line.y1 * scaleY);
     ctx.lineTo(line.x * scaleX, line.y2 * scaleY);
     ctx.stroke();
   });
   ctx.restore();
+}
+
+export function processFrame(sourceCanvas: HTMLCanvasElement, targetCanvas: HTMLCanvasElement, settings: ProcessorSettings) {
+  processImage(sourceCanvas, targetCanvas, settings);
 }

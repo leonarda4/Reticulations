@@ -20,6 +20,7 @@ export default function Page() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [videoFps, setVideoFps] = useState(15); // Optimized FPS for video
+  const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [settings, setSettings] = useState<ProcessorSettings>({
     gridSize: 10,
     contrast: 1.5,
@@ -42,6 +43,7 @@ export default function Page() {
   const animationFrameRef = useRef<number | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const loadSeqRef = useRef(0);
+  const statusTimerRef = useRef<number | null>(null);
 
   // Load demo image on start
   useEffect(() => {
@@ -51,6 +53,10 @@ export default function Page() {
 
   useEffect(() => {
     return () => {
+      if (statusTimerRef.current) {
+        window.clearTimeout(statusTimerRef.current);
+        statusTimerRef.current = null;
+      }
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = null;
@@ -71,10 +77,30 @@ export default function Page() {
         await ffmpeg.load({
           coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
           wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+          workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript'),
         });
       } catch (error) {
         console.warn('FFmpeg initialization skipped (will only affect video export):', error);
       }
+    }
+  };
+
+  const ensureFFmpegLoaded = async (): Promise<boolean> => {
+    await initFFmpeg();
+    const ref = ffmpegRef.current;
+    if (!ref || !ref.ffmpeg) return false;
+    if (ref.ffmpeg.loaded) return true;
+    try {
+      const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
+      await ref.ffmpeg.load({
+        coreURL: await ref.toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await ref.toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        workerURL: await ref.toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript'),
+      });
+      return true;
+    } catch (error) {
+      console.warn('FFmpeg failed to load:', error);
+      return false;
     }
   };
 
@@ -115,6 +141,18 @@ export default function Page() {
     processFrame(sourceCanvasRef.current, targetCanvasRef.current, settings);
   }, [imageSrc, isVideo, settings]);
 
+  const setStatus = (type: 'success' | 'error', message: string) => {
+    if (statusTimerRef.current) {
+      window.clearTimeout(statusTimerRef.current);
+      statusTimerRef.current = null;
+    }
+    setUploadStatus({ type, message });
+    statusTimerRef.current = window.setTimeout(() => {
+      setUploadStatus(null);
+      statusTimerRef.current = null;
+    }, 4000);
+  };
+
   const loadImage = (src: string, loadSeq?: number) => {
     const img = new Image();
     img.crossOrigin = "Anonymous";
@@ -136,12 +174,14 @@ export default function Page() {
         ctx?.drawImage(img, 0, 0, w, h);
         setImageSrc(src);
         setIsVideo(false);
+        setStatus('success', 'Image loaded');
       }
     };
     img.onerror = () => {
       if (loadSeq !== undefined && loadSeq !== loadSeqRef.current) return;
       setImageSrc(null);
       setIsVideo(false);
+      setStatus('error', 'Image failed to load');
     };
     img.src = src;
   };
@@ -159,12 +199,14 @@ export default function Page() {
           sourceCanvasRef.current.height = videoRef.current.videoHeight;
           setImageSrc(src);
           setIsVideo(true);
+          setStatus('success', 'Video loaded');
         }
       };
       video.onerror = () => {
         if (loadSeq !== undefined && loadSeq !== loadSeqRef.current) return;
         setImageSrc(null);
         setIsVideo(false);
+        setStatus('error', 'Video failed to load');
       };
     }
   };
@@ -181,7 +223,8 @@ export default function Page() {
       }
       const src = URL.createObjectURL(file);
       objectUrlRef.current = src;
-      setImageSrc(null);
+      setImageSrc(src);
+      setIsVideo(isVideoFile);
       if (isVideoFile) {
         loadVideo(src, currentSeq);
       } else {
@@ -207,6 +250,7 @@ export default function Page() {
     setExportProgress(0);
 
     try {
+      const ffmpegReady = await ensureFFmpegLoaded();
       const video = videoRef.current;
       const sourceCanvas = sourceCanvasRef.current;
       const targetCanvas = targetCanvasRef.current;
@@ -220,8 +264,33 @@ export default function Page() {
       const totalFrames = Math.floor(duration * fps);
 
       // Create canvas stream and record as WebM
+      if (typeof MediaRecorder === 'undefined') {
+        setStatus('error', 'Video export not supported in this browser');
+        setIsExporting(false);
+        setExportProgress(0);
+        return;
+      }
+
       const stream = targetCanvas.captureStream(fps);
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      const preferredTypes = [
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm',
+      ];
+      const canCheckTypes = typeof MediaRecorder.isTypeSupported === 'function';
+      const mimeType = canCheckTypes
+        ? preferredTypes.find((type) => MediaRecorder.isTypeSupported(type))
+        : undefined;
+
+      let mediaRecorder: MediaRecorder;
+      try {
+        mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      } catch (error) {
+        setStatus('error', 'Video export not supported in this browser');
+        setIsExporting(false);
+        setExportProgress(0);
+        return;
+      }
       const chunks: BlobPart[] = [];
 
       await new Promise<void>((resolve) => {
@@ -254,7 +323,7 @@ export default function Page() {
       });
 
       // Convert WebM to MP4 using FFmpeg
-      if (!ffmpegRef.current || !ffmpegRef.current.ffmpeg) {
+      if (!ffmpegRef.current || !ffmpegRef.current.ffmpeg || !ffmpegReady) {
         // Fallback: download as WebM if FFmpeg is not available
         const webmBlob = new Blob(chunks, { type: 'video/webm' });
         const url = URL.createObjectURL(webmBlob);
@@ -263,6 +332,7 @@ export default function Page() {
         link.download = 'reticulations-video.webm';
         link.click();
         URL.revokeObjectURL(url);
+        setStatus('success', 'Exported WebM (MP4 unavailable)');
         setIsExporting(false);
         setExportProgress(0);
         return;
@@ -298,6 +368,7 @@ export default function Page() {
       setExportProgress(0);
     } catch (error) {
       console.error('Error exporting video:', error);
+      setStatus('error', 'Video export failed');
       setIsExporting(false);
       setExportProgress(0);
     }
@@ -565,6 +636,20 @@ export default function Page() {
         )}
       </div>
     </main>
+      {uploadStatus && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div
+            className={`rounded-md border px-3 py-2 text-xs shadow-lg backdrop-blur-md ${
+              uploadStatus.type === 'success'
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                : 'border-red-500/30 bg-red-500/10 text-red-100'
+            }`}
+            role={uploadStatus.type === 'error' ? 'alert' : 'status'}
+          >
+            {uploadStatus.message}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

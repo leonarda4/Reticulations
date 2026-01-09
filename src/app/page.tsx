@@ -19,7 +19,7 @@ export default function Page() {
   const [isVideo, setIsVideo] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
-  const [videoFps, setVideoFps] = useState(15); // Optimized FPS for video
+  const videoFps = 8;
   const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [settings, setSettings] = useState<ProcessorSettings>({
     gridSize: 10,
@@ -134,7 +134,7 @@ export default function Page() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isVideo, settings, videoFps]);
+  }, [isVideo, settings]);
 
   useEffect(() => {
     if (isVideo || !imageSrc || !sourceCanvasRef.current || !targetCanvasRef.current) return;
@@ -261,7 +261,8 @@ export default function Page() {
       // Get video metadata - use optimized FPS for export
       const fps = videoFps;
       const duration = video.duration;
-      const totalFrames = Math.floor(duration * fps);
+      const totalFrames = Math.max(1, Math.round(duration * fps));
+      const frameIntervalMs = 1000 / fps;
 
       // Create canvas stream and record as WebM
       if (typeof MediaRecorder === 'undefined') {
@@ -293,6 +294,30 @@ export default function Page() {
       }
       const chunks: BlobPart[] = [];
 
+      const seekTo = (time: number) => {
+        return new Promise<void>((resolve, reject) => {
+          const handleSeeked = () => {
+            cleanup();
+            resolve();
+          };
+          const handleError = () => {
+            cleanup();
+            reject(new Error('Video seek failed'));
+          };
+          const cleanup = () => {
+            video.removeEventListener('seeked', handleSeeked);
+            video.removeEventListener('error', handleError);
+          };
+          video.addEventListener('seeked', handleSeeked, { once: true });
+          video.addEventListener('error', handleError, { once: true });
+          video.currentTime = Math.min(time, duration);
+        });
+      };
+
+      const previousLoop = video.loop;
+      video.loop = false;
+      video.pause();
+
       await new Promise<void>((resolve) => {
         mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
         mediaRecorder.onstop = () => resolve();
@@ -301,25 +326,36 @@ export default function Page() {
 
         // Process video frame by frame
         let currentFrame = 0;
-        const processNextFrame = () => {
+        const renderNext = () => {
           if (currentFrame >= totalFrames) {
-            setTimeout(() => mediaRecorder.stop(), 100);
+            setTimeout(() => {
+              mediaRecorder.stop();
+              video.loop = previousLoop;
+            }, 100);
             return;
           }
 
-          video.currentTime = currentFrame / fps;
+          const targetTime = currentFrame / fps;
+          const tickStart = performance.now();
 
-          // Wait for frame to load
-          setTimeout(() => {
-            sourceCtx.drawImage(video, 0, 0);
-            processFrame(sourceCanvas, targetCanvas, settings);
-            currentFrame++;
-            setExportProgress(Math.round((currentFrame / totalFrames) * 50));
-            processNextFrame();
-          }, 50);
+          seekTo(targetTime)
+            .then(() => {
+              sourceCtx.drawImage(video, 0, 0);
+              processFrame(sourceCanvas, targetCanvas, settings);
+              currentFrame++;
+              setExportProgress(Math.round((currentFrame / totalFrames) * 50));
+            })
+            .catch(() => {
+              currentFrame = totalFrames;
+            })
+            .finally(() => {
+              const elapsed = performance.now() - tickStart;
+              const delay = Math.max(0, frameIntervalMs - elapsed);
+              setTimeout(renderNext, delay);
+            });
         };
 
-        processNextFrame();
+        renderNext();
       });
 
       // Convert WebM to MP4 using FFmpeg
@@ -372,6 +408,143 @@ export default function Page() {
       setIsExporting(false);
       setExportProgress(0);
     }
+  };
+
+  const handleDownloadSnippet = () => {
+    const snippet = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reticulations Snippet</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0f0f0f; }
+    #reticulation-root { width: 100%; height: 100%; display: grid; place-items: center; }
+    canvas { width: min(90vw, 900px); height: auto; border-radius: 10px; }
+  </style>
+</head>
+<body>
+  <div id="reticulation-root">
+    <canvas id="reticulations"></canvas>
+  </div>
+  <script>
+    const canvas = document.getElementById('reticulations');
+    const ctx = canvas.getContext('2d');
+    const source = document.createElement('canvas');
+    const sctx = source.getContext('2d');
+
+    const settings = {
+      gridSize: ${settings.gridSize},
+      contrast: ${settings.contrast},
+      fgColor: "${settings.fgColor}",
+      bgColor: "${settings.bgColor}",
+      shape: "${settings.shape}",
+      invert: ${settings.invert},
+      uniformSize: ${settings.uniformSize},
+      overlap: ${settings.overlap}
+    };
+
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.src = "${imageSrc ?? DEMO_IMAGE}";
+
+    function drawShape(x, y, size) {
+      ctx.fillStyle = settings.fgColor;
+      ctx.save();
+      ctx.translate(x, y);
+      if (settings.shape === "circle") {
+        ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI * 2); ctx.fill();
+      } else if (settings.shape === "square") {
+        ctx.fillRect(-size, -size, size * 2, size * 2);
+      } else if (settings.shape === "triangle") {
+        ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(-size, size); ctx.lineTo(size, size);
+        ctx.closePath(); ctx.fill();
+      } else if (settings.shape === "diamond") {
+        ctx.rotate(Math.PI / 4); ctx.fillRect(-size, -size, size * 2, size * 2);
+      } else if (settings.shape === "star") {
+        let rot = Math.PI / 2 * 3, step = Math.PI / 5;
+        ctx.beginPath(); ctx.moveTo(0, -size);
+        for (let i = 0; i < 5; i++) {
+          ctx.lineTo(Math.cos(rot) * size, Math.sin(rot) * size); rot += step;
+          ctx.lineTo(Math.cos(rot) * (size / 2), Math.sin(rot) * (size / 2)); rot += step;
+        }
+        ctx.closePath(); ctx.fill();
+      } else if (settings.shape === "heart") {
+        const t = size * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(0, t);
+        ctx.bezierCurveTo(0, t - size / 2, -size, t - size / 2, -size, 0);
+        ctx.bezierCurveTo(-size, -t / 2, 0, -t, 0, -t);
+        ctx.bezierCurveTo(0, -t, size, -t / 2, size, 0);
+        ctx.bezierCurveTo(size, t - size / 2, 0, t - size / 2, 0, t);
+        ctx.closePath(); ctx.fill();
+      } else if (settings.shape === "hex") {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const ang = (Math.PI / 3) * i;
+          const px = Math.cos(ang) * size;
+          const py = Math.sin(ang) * size;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath(); ctx.fill();
+      } else if (settings.shape === "parallel") {
+        ctx.lineWidth = size * 0.25;
+        ctx.strokeStyle = settings.fgColor;
+        const w = size * 1.4;
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath();
+          ctx.moveTo(i * w, -size * 1.2);
+          ctx.lineTo(i * w, size * 1.2);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+
+    function render() {
+      const w = image.width, h = image.height;
+      if (!w || !h) return;
+      source.width = w; source.height = h;
+      canvas.width = w; canvas.height = h;
+      sctx.drawImage(image, 0, 0, w, h);
+      ctx.fillStyle = settings.bgColor;
+      ctx.fillRect(0, 0, w, h);
+
+      const cols = Math.ceil(w / settings.gridSize);
+      const rows = Math.ceil(h / settings.gridSize);
+      for (let i = 0; i < cols; i++) {
+        for (let j = 0; j < rows; j++) {
+          const x = i * settings.gridSize;
+          const y = j * settings.gridSize;
+          const cw = Math.min(settings.gridSize, w - x);
+          const ch = Math.min(settings.gridSize, h - y);
+          const data = sctx.getImageData(x, y, cw, ch).data;
+          let total = 0;
+          for (let k = 0; k < data.length; k += 4) total += (data[k] + data[k+1] + data[k+2]) / 3;
+          let avg = total / (data.length / 4);
+          let adjusted = Math.pow(avg / 255, 1 / settings.contrast) * 255;
+          if (settings.invert) adjusted = 255 - adjusted;
+          const maxSize = Math.min(cw, ch) / 2;
+          let size = settings.uniformSize ? (adjusted > 128 ? maxSize : 0) : ((255 - adjusted) / 255) * maxSize;
+          size *= (1 + settings.overlap);
+          if (size > 0) drawShape(x + cw / 2, y + ch / 2, size);
+        }
+      }
+    }
+
+    image.onload = render;
+  </script>
+</body>
+</html>`;
+
+    const blob = new Blob([snippet], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'reticulations-snippet.html';
+    link.click();
+    URL.revokeObjectURL(url);
+    setStatus('success', 'Snippet downloaded');
   };
 
   return (
@@ -467,18 +640,6 @@ export default function Page() {
                 <Slider
                   id="sensitivity" min={0.5} max={2} step={0.1} value={[settings.sensitivity ?? 1]}
                   onValueChange={([val]) => setSettings(s => ({ ...s, sensitivity: val }))}
-                />
-              </div>
-            )}
-            {isVideo && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="videoFps">Video FPS</Label>
-                  <span className="text-xs text-muted-foreground">{videoFps} fps</span>
-                </div>
-                <Slider
-                  id="videoFps" min={5} max={30} step={1} value={[videoFps]}
-                  onValueChange={([val]) => setVideoFps(val)}
                 />
               </div>
             )}
@@ -596,6 +757,16 @@ export default function Page() {
           >
             <Download className="w-4 h-4 mr-2" />
             {isVideo ? (isExporting ? `Exporting ${exportProgress}%` : 'Export Video') : 'Export Image'}
+          </Button>
+          <Button
+            onClick={handleDownloadSnippet}
+            className="w-full"
+            size="lg"
+            variant="outline"
+            disabled={!imageSrc}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download Snippet
           </Button>
         </div>
       </aside>

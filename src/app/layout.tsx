@@ -1,18 +1,22 @@
 import type { Metadata } from 'next'
 import './globals.css'
 
+const metadataBase = new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000')
+const ogImage = '/assets/Reticulations%20logo.png'
+
 export const metadata: Metadata = {
+    metadataBase,
     title: 'Reticulations',
     description: 'Image processing app',
     icons: {
-        icon: '/assets/logo.svg',
+        icon: ogImage,
     },
     openGraph: {
-        images: '/assets/logo.svg',
+        images: ogImage,
     },
     twitter: {
         card: 'summary_large_image',
-        images: '/assets/logo.svg',
+        images: ogImage,
     },
 }
 

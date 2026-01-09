@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 
 const logoUrl = '/assets/Reticulations logo.png';
 const DEMO_IMAGE = '/assets/giraffe.jpg';
+const DEFAULT_VIDEO = '/assets/Default%20video.mp4';
 
 export default function Page() {
   // State
@@ -19,18 +20,19 @@ export default function Page() {
   const [isVideo, setIsVideo] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
-  const videoFps = 8;
+  const [videoFps, setVideoFps] = useState(8);
   const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [mediaState, setMediaState] = useState<'idle' | 'loading' | 'ready' | 'error'>('loading');
   const [settings, setSettings] = useState<ProcessorSettings>({
-    gridSize: 10,
-    contrast: 1.5,
+    gridSize: 20,
+    contrast: 1.8,
     fgColor: '#ffffff',
     bgColor: '#1a1a1a',
     shape: 'circle',
     invert: false,
     uniformSize: false,
-    overlap: 0.2,
-    edgeDetection: true,
+    overlap: 0.3,
+    edgeDetection: false,
     sensitivity: 1
   });
 
@@ -47,7 +49,8 @@ export default function Page() {
 
   // Load demo image on start
   useEffect(() => {
-    loadImage(DEMO_IMAGE);
+    setMediaState('loading');
+    loadVideo(DEFAULT_VIDEO);
     initFFmpeg();
   }, []);
 
@@ -134,7 +137,7 @@ export default function Page() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isVideo, settings]);
+  }, [isVideo, settings, videoFps]);
 
   useEffect(() => {
     if (isVideo || !imageSrc || !sourceCanvasRef.current || !targetCanvasRef.current) return;
@@ -174,6 +177,8 @@ export default function Page() {
         ctx?.drawImage(img, 0, 0, w, h);
         setImageSrc(src);
         setIsVideo(false);
+        setMediaState('ready');
+        processFrame(canvas, targetCanvasRef.current!, settings);
         setStatus('success', 'Image loaded');
       }
     };
@@ -181,6 +186,7 @@ export default function Page() {
       if (loadSeq !== undefined && loadSeq !== loadSeqRef.current) return;
       setImageSrc(null);
       setIsVideo(false);
+      setMediaState('error');
       setStatus('error', 'Image failed to load');
     };
     img.src = src;
@@ -199,13 +205,26 @@ export default function Page() {
           sourceCanvasRef.current.height = videoRef.current.videoHeight;
           setImageSrc(src);
           setIsVideo(true);
-          setStatus('success', 'Video loaded');
+          video.currentTime = 0;
+        }
+      };
+      video.onloadeddata = () => {
+        if (loadSeq !== undefined && loadSeq !== loadSeqRef.current) return;
+        if (sourceCanvasRef.current && targetCanvasRef.current) {
+          const ctx = sourceCanvasRef.current.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(video, 0, 0);
+            processFrame(sourceCanvasRef.current, targetCanvasRef.current, settings);
+            setMediaState('ready');
+            setStatus('success', 'Video loaded');
+          }
         }
       };
       video.onerror = () => {
         if (loadSeq !== undefined && loadSeq !== loadSeqRef.current) return;
         setImageSrc(null);
         setIsVideo(false);
+        setMediaState('error');
         setStatus('error', 'Video failed to load');
       };
     }
@@ -225,6 +244,7 @@ export default function Page() {
       objectUrlRef.current = src;
       setImageSrc(src);
       setIsVideo(isVideoFile);
+      setMediaState('loading');
       if (isVideoFile) {
         loadVideo(src, currentSeq);
       } else {
@@ -643,6 +663,18 @@ export default function Page() {
                 />
               </div>
             )}
+            {isVideo && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="videoFps">Video FPS</Label>
+                  <span className="text-xs text-muted-foreground">{videoFps} fps</span>
+                </div>
+                <Slider
+                  id="videoFps" min={8} max={24} step={1} value={[videoFps]}
+                  onValueChange={([val]) => setVideoFps(val)}
+                />
+              </div>
+            )}
           </section>
 
           <Separator />
@@ -774,11 +806,13 @@ export default function Page() {
       <main className="flex-1 bg-stone-900/50 relative flex items-center justify-center p-8 overflow-hidden bg-[radial-gradient(#2a2a2a_1px,transparent_1px)] [background-size:16px_16px]">
       <canvas ref={sourceCanvasRef} className="hidden" />
       <div className="relative shadow-2xl shadow-black/50 rounded-lg overflow-hidden border border-white/10 max-w-full max-h-full">
-        {!imageSrc && (
+        {mediaState !== 'ready' && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground z-10 bg-card/80 backdrop-blur-sm">
-            <div className="text-center">
+            <div className="text-center px-6 py-10 w-full max-w-3xl">
               <ImageIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>Upload an image or video to start</p>
+              {mediaState === 'loading' && <p>Loading media...</p>}
+              {mediaState === 'error' && <p>Failed to load media. Try again.</p>}
+              {mediaState === 'idle' && <p>Upload an image or video to start</p>}
             </div>
           </div>
         )}

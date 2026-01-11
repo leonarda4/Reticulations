@@ -21,6 +21,7 @@ export default function Page() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [videoFps, setVideoFps] = useState(8);
+  const [exportMode, setExportMode] = useState<'video' | 'png'>('video');
   const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [mediaState, setMediaState] = useState<'idle' | 'loading' | 'ready' | 'error'>('loading');
   const [settings, setSettings] = useState<ProcessorSettings>({
@@ -35,6 +36,7 @@ export default function Page() {
     edgeDetection: false,
     sensitivity: 1
   });
+  const isBgTransparent = settings.bgColor.trim().toLowerCase() === 'transparent';
 
   // Refs
   const sourceCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -430,6 +432,95 @@ export default function Page() {
     }
   };
 
+  const handleDownloadPngSequence = async () => {
+    if (!videoRef.current || !sourceCanvasRef.current || !targetCanvasRef.current) return;
+
+    setIsExporting(true);
+    setExportProgress(0);
+
+    try {
+      const video = videoRef.current;
+      const sourceCanvas = sourceCanvasRef.current;
+      const targetCanvas = targetCanvasRef.current;
+      const sourceCtx = sourceCanvas.getContext('2d');
+
+      if (!sourceCtx) return;
+
+      const fps = videoFps;
+      const duration = video.duration;
+      const totalFrames = Math.max(1, Math.round(duration * fps));
+      const frameIntervalMs = 1000 / fps;
+
+      const seekTo = (time: number) => {
+        return new Promise<void>((resolve, reject) => {
+          const handleSeeked = () => {
+            cleanup();
+            resolve();
+          };
+          const handleError = () => {
+            cleanup();
+            reject(new Error('Video seek failed'));
+          };
+          const cleanup = () => {
+            video.removeEventListener('seeked', handleSeeked);
+            video.removeEventListener('error', handleError);
+          };
+          video.addEventListener('seeked', handleSeeked, { once: true });
+          video.addEventListener('error', handleError, { once: true });
+          video.currentTime = Math.min(time, duration);
+        });
+      };
+
+      const previousLoop = video.loop;
+      video.loop = false;
+      video.pause();
+
+      const { default: JSZip } = await import('jszip');
+      const zip = new JSZip();
+
+      for (let frame = 0; frame < totalFrames; frame += 1) {
+        const targetTime = frame / fps;
+        const tickStart = performance.now();
+
+        await seekTo(targetTime);
+        sourceCtx.drawImage(video, 0, 0);
+        processFrame(sourceCanvas, targetCanvas, settings);
+
+        const blob = await new Promise<Blob | null>((resolve) =>
+          targetCanvas.toBlob(resolve, 'image/png')
+        );
+        if (blob) {
+          const index = String(frame + 1).padStart(4, '0');
+          zip.file(`reticulations-frame-${index}.png`, blob);
+        }
+
+        setExportProgress(Math.round(((frame + 1) / totalFrames) * 100));
+        const elapsed = performance.now() - tickStart;
+        const delay = Math.max(0, frameIntervalMs - elapsed);
+        if (delay > 0) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+
+      video.loop = previousLoop;
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'reticulations-frames.zip';
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatus('success', 'PNG sequence downloaded');
+      setIsExporting(false);
+      setExportProgress(0);
+    } catch (error) {
+      console.error('Error exporting PNG sequence:', error);
+      setStatus('error', 'PNG sequence export failed');
+      setIsExporting(false);
+      setExportProgress(0);
+    }
+  };
+
   const handleDownloadSnippet = () => {
     const snippet = `<!doctype html>
 <html lang="en">
@@ -749,7 +840,18 @@ export default function Page() {
                     value={settings.bgColor}
                     onChange={(e) => setSettings(s => ({ ...s, bgColor: e.target.value }))}
                     className="h-9 w-12 cursor-pointer rounded-md border border-input bg-background p-1"
+                    disabled={settings.bgColor.trim().toLowerCase() === 'transparent'}
                   />
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="bgTransparent"
+                      checked={settings.bgColor.trim().toLowerCase() === 'transparent'}
+                      onCheckedChange={(checked) =>
+                        setSettings(s => ({ ...s, bgColor: checked ? 'transparent' : '#1a1a1a' }))
+                      }
+                    />
+                    <Label htmlFor="bgTransparent" className="text-xs text-muted-foreground">Transparent</Label>
+                  </div>
                 </div>
               </div>
               <div className="space-y-2">
@@ -773,7 +875,18 @@ export default function Page() {
                     value={settings.fgColor}
                     onChange={(e) => setSettings(s => ({ ...s, fgColor: e.target.value }))}
                     className="h-9 w-12 cursor-pointer rounded-md border border-input bg-background p-1"
+                    disabled={settings.fgColor.trim().toLowerCase() === 'transparent'}
                   />
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="fgTransparent"
+                      checked={settings.fgColor.trim().toLowerCase() === 'transparent'}
+                      onCheckedChange={(checked) =>
+                        setSettings(s => ({ ...s, fgColor: checked ? 'transparent' : '#ffffff' }))
+                      }
+                    />
+                    <Label htmlFor="fgTransparent" className="text-xs text-muted-foreground">Transparent</Label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -781,14 +894,48 @@ export default function Page() {
         </div>
 
         <div className="p-6 border-t border-border mt-auto space-y-2">
+          {isVideo && (
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={exportMode === 'video' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1"
+                onClick={() => setExportMode('video')}
+              >
+                Video
+              </Button>
+              <Button
+                type="button"
+                variant={exportMode === 'png' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1"
+                onClick={() => setExportMode('png')}
+              >
+                PNG Sequence
+              </Button>
+            </div>
+          )}
           <Button
-            onClick={isVideo ? handleDownloadVideo : handleDownloadImage}
+            onClick={
+              isVideo
+                ? exportMode === 'video'
+                  ? handleDownloadVideo
+                  : handleDownloadPngSequence
+                : handleDownloadImage
+            }
             className="w-full"
             size="lg"
             disabled={isVideo ? isExporting : false}
           >
             <Download className="w-4 h-4 mr-2" />
-            {isVideo ? (isExporting ? `Exporting ${exportProgress}%` : 'Export Video') : 'Export Image'}
+            {isVideo
+              ? isExporting
+                ? `Exporting ${exportProgress}%`
+                : exportMode === 'video'
+                  ? 'Export Video'
+                  : 'Export PNG Sequence'
+              : 'Export Image'}
           </Button>
           <Button
             onClick={handleDownloadSnippet}
@@ -835,7 +982,7 @@ export default function Page() {
         ) : (
           <canvas
             ref={targetCanvasRef}
-            className="max-w-full max-h-[85vh] object-contain block bg-checkered"
+            className={`max-w-full max-h-[85vh] object-contain block ${isBgTransparent ? '' : 'bg-checkered'}`}
             style={{ opacity: imageSrc ? 1 : 0.5, transition: 'opacity 0.3s ease' }}
           />
         )}

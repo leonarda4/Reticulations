@@ -35,9 +35,16 @@ export function processImage(sourceCanvas: HTMLCanvasElement, targetCanvas: HTML
   targetCanvas.width = width;
   targetCanvas.height = height;
 
-  // Fill background
-  targetCtx.fillStyle = settings.bgColor;
-  targetCtx.fillRect(0, 0, width, height);
+  const bgIsTransparent = isTransparentColor(settings.bgColor);
+  const fgIsTransparent = isTransparentColor(settings.fgColor);
+
+  // Fill background or clear for transparency
+  if (bgIsTransparent) {
+    targetCtx.clearRect(0, 0, width, height);
+  } else {
+    targetCtx.fillStyle = settings.bgColor;
+    targetCtx.fillRect(0, 0, width, height);
+  }
 
   const cols = Math.ceil(width / settings.gridSize);
   const rows = Math.ceil(height / settings.gridSize);
@@ -102,12 +109,17 @@ export function processImage(sourceCanvas: HTMLCanvasElement, targetCanvas: HTML
       size *= (1 + settings.overlap);
       if (size < 0) size = 0;
 
-      if (size > 0) {
+      if (size > 0 && !fgIsTransparent) {
         targetCtx.fillStyle = settings.fgColor;
         drawShape(targetCtx, settings.shape, x + cellWidth / 2, y + cellHeight / 2, size, settings.fgColor);
       }
     }
   }
+}
+
+function isTransparentColor(color: string) {
+  const normalized = color.trim().toLowerCase();
+  return normalized === 'transparent' || normalized === '#00000000' || normalized === 'rgba(0,0,0,0)';
 }
 
 function drawShape(ctx: CanvasRenderingContext2D, shape: ShapeType, x: number, y: number, size: number, fgColor?: string) {

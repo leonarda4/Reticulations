@@ -522,8 +522,15 @@ export default function Page() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
-      <aside className="w-full md:w-[380px] border-r border-border bg-card/50 backdrop-blur-xl h-full flex flex-col md:h-screen z-10 overflow-y-auto custom-scrollbar">
-        <div className="p-6 border-b border-border">
+      <div className="p-6 border-b border-border md:hidden">
+        <div className="flex items-center gap-2">
+          <img src={logoUrl} className="w-8 h-8 rounded object-contain" alt="Reticulations Logo" />
+          <h1 className="text-xl font-bold tracking-tight">Reticulations</h1>
+        </div>
+      </div>
+
+      <aside className="order-3 md:order-1 w-full md:w-[380px] border-r border-border bg-card/50 backdrop-blur-xl h-full flex flex-col md:h-screen z-10 overflow-y-auto custom-scrollbar">
+        <div className="hidden md:block p-6 border-b border-border">
           <div className="flex items-center gap-2">
             <img src={logoUrl} className="w-8 h-8 rounded object-contain" alt="Reticulations Logo" />
             <h1 className="text-xl font-bold tracking-tight">Reticulations</h1>
@@ -531,19 +538,19 @@ export default function Page() {
         </div>
 
         <div className="flex-1 p-6 space-y-8">
-          <section className="space-y-4">
-            <Label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Source</Label>
+          <section className="space-y-3 md:space-y-4">
+            <Label className="text-[10px] md:text-xs uppercase tracking-wider font-semibold text-muted-foreground">Source</Label>
             <div
-              className="border-2 border-dashed border-border rounded-lg p-6 hover:bg-accent/50 transition-colors cursor-pointer text-center group"
+              className="border-2 border-dashed border-border rounded-lg p-3 md:p-6 hover:bg-accent/50 transition-colors cursor-pointer text-center group"
               onClick={() => fileInputRef.current?.click()}
             >
               {isVideo ? (
-                <Video className="w-8 h-8 mx-auto mb-2 text-muted-foreground group-hover:text-primary transition-colors" />
+                <Video className="w-7 h-7 md:w-8 md:h-8 mx-auto mb-1.5 md:mb-2 text-muted-foreground group-hover:text-primary transition-colors" />
               ) : (
-                <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground group-hover:text-primary transition-colors" />
+                <Upload className="w-7 h-7 md:w-8 md:h-8 mx-auto mb-1.5 md:mb-2 text-muted-foreground group-hover:text-primary transition-colors" />
               )}
-              <p className="text-sm font-medium">Click to upload image or video</p>
-              <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WEBP, MP4, WebM, OGG</p>
+              <p className="text-xs md:text-sm font-medium">Click to upload image or video</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-1">JPG, PNG, WEBP, MP4, WebM, OGG</p>
             </div>
             <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
             <video ref={videoRef} className="hidden" />
@@ -806,7 +813,7 @@ export default function Page() {
         </div>
       </aside>
 
-      <main className="flex-1 bg-stone-900/50 relative flex items-center justify-center p-8 overflow-hidden bg-[radial-gradient(#2a2a2a_1px,transparent_1px)] [background-size:16px_16px]">
+      <main className="order-2 md:order-2 flex-1 bg-stone-900/50 relative flex items-center justify-center p-8 overflow-hidden bg-[radial-gradient(#2a2a2a_1px,transparent_1px)] [background-size:16px_16px]">
         <canvas ref={sourceCanvasRef} className="hidden" />
         <div className="flex flex-col items-center max-w-full">
           <div className="relative shadow-2xl shadow-black/50 rounded-lg overflow-hidden border border-white/10 max-w-full max-h-full">

@@ -539,7 +539,7 @@ export default function Page() {
 
         <div className="flex-1 p-6 space-y-8">
           <section className="space-y-3 md:space-y-4">
-            <Label className="text-[10px] md:text-xs uppercase tracking-wider font-semibold text-muted-foreground">Source</Label>
+            <Label className="hidden md:block text-xs uppercase tracking-wider font-semibold text-muted-foreground">Source</Label>
             <div
               className="border-2 border-dashed border-border rounded-lg p-3 md:p-6 hover:bg-accent/50 transition-colors cursor-pointer text-center group"
               onClick={() => fileInputRef.current?.click()}

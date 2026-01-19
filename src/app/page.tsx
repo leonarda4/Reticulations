@@ -522,7 +522,7 @@ export default function Page() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
-      <div className="p-6 border-b border-border md:hidden">
+      <div className="p-4 border-b border-border md:hidden">
         <div className="flex items-center gap-2">
           <img src={logoUrl} className="w-8 h-8 rounded object-contain" alt="Reticulations Logo" />
           <h1 className="text-xl font-bold tracking-tight">Reticulations</h1>
@@ -537,8 +537,8 @@ export default function Page() {
           </div>
         </div>
 
-        <div className="flex-1 p-6 space-y-8">
-          <section className="space-y-3 md:space-y-4">
+        <div className="flex-1 p-4 md:p-6 space-y-6 md:space-y-8">
+          <section className="space-y-2 md:space-y-4">
             <Label className="hidden md:block text-xs uppercase tracking-wider font-semibold text-muted-foreground">Source</Label>
             <div
               className="border-2 border-dashed border-border rounded-lg p-3 md:p-6 hover:bg-accent/50 transition-colors cursor-pointer text-center group"
@@ -558,7 +558,7 @@ export default function Page() {
 
           <Separator />
 
-          <section className="space-y-6">
+          <section className="space-y-4 md:space-y-6">
             <Label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Parameters</Label>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -639,7 +639,7 @@ export default function Page() {
 
           <Separator />
 
-          <section className="space-y-4">
+          <section className="space-y-3 md:space-y-4">
             <Label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Shape Primitive</Label>
             <div className="grid grid-cols-4 gap-2">
               {Object.keys(SHAPES).map((shapeKey) => (
@@ -677,7 +677,7 @@ export default function Page() {
 
           <Separator />
 
-          <section className="space-y-4">
+          <section className="space-y-3 md:space-y-4">
             <div className="flex items-center justify-between">
               <Label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Palette</Label>
               <Button
@@ -685,13 +685,41 @@ export default function Page() {
                 variant="outline"
                 size="icon"
                 className="h-7 w-7"
-                onClick={() => setSettings(s => ({ ...s, bgColor: s.fgColor, fgColor: s.bgColor }))}
+                onClick={() => {
+                  if (settings.bgColor.trim().toLowerCase() === 'transparent') return;
+                  setSettings(s => ({ ...s, bgColor: s.fgColor, fgColor: s.bgColor }));
+                }}
+                disabled={settings.bgColor.trim().toLowerCase() === 'transparent'}
                 title="Swap colors"
               >
                 <ArrowLeftRight className="h-3.5 w-3.5" />
               </Button>
             </div>
             <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs">Foreground Color</Label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type="text"
+                      value={settings.fgColor}
+                      onChange={(e) => setSettings(s => ({ ...s, fgColor: e.target.value }))}
+                      className="pl-10 font-mono text-xs h-9 uppercase"
+                      placeholder="#FFFFFF"
+                    />
+                    <div
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded border border-white/10"
+                      style={{ backgroundColor: settings.fgColor }}
+                    />
+                  </div>
+                  <input
+                    type="color"
+                    value={settings.fgColor}
+                    onChange={(e) => setSettings(s => ({ ...s, fgColor: e.target.value }))}
+                    className="h-9 w-12 cursor-pointer rounded-md border border-input bg-background p-1"
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label className="text-xs">Background Color</Label>
                 <div className="flex items-center gap-2">
@@ -715,58 +743,23 @@ export default function Page() {
                     className="h-9 w-12 cursor-pointer rounded-md border border-input bg-background p-1"
                     disabled={settings.bgColor.trim().toLowerCase() === 'transparent'}
                   />
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="bgTransparent"
-                      checked={settings.bgColor.trim().toLowerCase() === 'transparent'}
-                      onCheckedChange={(checked) =>
-                        setSettings(s => ({ ...s, bgColor: checked ? 'transparent' : '#1a1a1a' }))
-                      }
-                    />
-                    <Label htmlFor="bgTransparent" className="text-xs text-muted-foreground">Transparent</Label>
-                  </div>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs">Foreground Color</Label>
                 <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      type="text"
-                      value={settings.fgColor}
-                      onChange={(e) => setSettings(s => ({ ...s, fgColor: e.target.value }))}
-                      className="pl-10 font-mono text-xs h-9 uppercase"
-                      placeholder="#FFFFFF"
-                    />
-                    <div
-                      className="absolute left-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded border border-white/10"
-                      style={{ backgroundColor: settings.fgColor }}
-                    />
-                  </div>
-                  <input
-                    type="color"
-                    value={settings.fgColor}
-                    onChange={(e) => setSettings(s => ({ ...s, fgColor: e.target.value }))}
-                    className="h-9 w-12 cursor-pointer rounded-md border border-input bg-background p-1"
-                    disabled={settings.fgColor.trim().toLowerCase() === 'transparent'}
+                  <Switch
+                    id="bgTransparent"
+                    checked={settings.bgColor.trim().toLowerCase() === 'transparent'}
+                    onCheckedChange={(checked) =>
+                      setSettings(s => ({ ...s, bgColor: checked ? 'transparent' : '#1a1a1a' }))
+                    }
                   />
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="fgTransparent"
-                      checked={settings.fgColor.trim().toLowerCase() === 'transparent'}
-                      onCheckedChange={(checked) =>
-                        setSettings(s => ({ ...s, fgColor: checked ? 'transparent' : '#ffffff' }))
-                      }
-                    />
-                    <Label htmlFor="fgTransparent" className="text-xs text-muted-foreground">Transparent</Label>
-                  </div>
+                  <Label htmlFor="bgTransparent" className="text-xs text-muted-foreground">Transparent</Label>
                 </div>
               </div>
             </div>
           </section>
         </div>
 
-        <div className="p-6 border-t border-border mt-auto space-y-2">
+        <div className="p-4 md:p-6 border-t border-border mt-auto space-y-2">
           {isVideo && (
             <div className="flex gap-2">
               <Button
@@ -813,7 +806,7 @@ export default function Page() {
         </div>
       </aside>
 
-      <main className="order-2 md:order-2 flex-1 bg-stone-900/50 relative flex items-center justify-center p-8 overflow-hidden bg-[radial-gradient(#2a2a2a_1px,transparent_1px)] [background-size:16px_16px]">
+      <main className="order-2 md:order-2 flex-1 bg-stone-900/50 relative flex items-center justify-center p-4 md:p-8 overflow-hidden bg-[radial-gradient(#2a2a2a_1px,transparent_1px)] [background-size:16px_16px]">
         <canvas ref={sourceCanvasRef} className="hidden" />
         <div className="flex flex-col items-center max-w-full">
           <div className="relative shadow-2xl shadow-black/50 rounded-lg overflow-hidden border border-white/10 max-w-full max-h-full">

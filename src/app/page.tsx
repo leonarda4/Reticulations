@@ -12,7 +12,6 @@ import { Input } from '@/components/ui/input';
 
 const logoUrl = '/assets/Reticulations logo.png';
 const DEMO_IMAGE = '/assets/giraffe.jpg';
-const DEFAULT_VIDEO = '/assets/Default%20video.mp4';
 
 export default function Page() {
   // State
@@ -30,7 +29,7 @@ export default function Page() {
     fgColor: '#ffffff',
     bgColor: '#1a1a1a',
     shape: 'circle',
-    invert: false,
+    invert: true,
     uniformSize: false,
     overlap: 0.3,
     edgeDetection: false,
@@ -52,7 +51,7 @@ export default function Page() {
   // Load demo image on start
   useEffect(() => {
     setMediaState('loading');
-    loadVideo(DEFAULT_VIDEO);
+    loadImage(DEMO_IMAGE);
     initFFmpeg();
   }, []);
 
@@ -521,143 +520,6 @@ export default function Page() {
     }
   };
 
-  const handleDownloadSnippet = () => {
-    const snippet = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Reticulations Snippet</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #0f0f0f; }
-    #reticulation-root { width: 100%; height: 100%; display: grid; place-items: center; }
-    canvas { width: min(90vw, 900px); height: auto; border-radius: 10px; }
-  </style>
-</head>
-<body>
-  <div id="reticulation-root">
-    <canvas id="reticulations"></canvas>
-  </div>
-  <script>
-    const canvas = document.getElementById('reticulations');
-    const ctx = canvas.getContext('2d');
-    const source = document.createElement('canvas');
-    const sctx = source.getContext('2d');
-
-    const settings = {
-      gridSize: ${settings.gridSize},
-      contrast: ${settings.contrast},
-      fgColor: "${settings.fgColor}",
-      bgColor: "${settings.bgColor}",
-      shape: "${settings.shape}",
-      invert: ${settings.invert},
-      uniformSize: ${settings.uniformSize},
-      overlap: ${settings.overlap}
-    };
-
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.src = "${imageSrc ?? DEMO_IMAGE}";
-
-    function drawShape(x, y, size) {
-      ctx.fillStyle = settings.fgColor;
-      ctx.save();
-      ctx.translate(x, y);
-      if (settings.shape === "circle") {
-        ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI * 2); ctx.fill();
-      } else if (settings.shape === "square") {
-        ctx.fillRect(-size, -size, size * 2, size * 2);
-      } else if (settings.shape === "triangle") {
-        ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(-size, size); ctx.lineTo(size, size);
-        ctx.closePath(); ctx.fill();
-      } else if (settings.shape === "diamond") {
-        ctx.rotate(Math.PI / 4); ctx.fillRect(-size, -size, size * 2, size * 2);
-      } else if (settings.shape === "star") {
-        let rot = Math.PI / 2 * 3, step = Math.PI / 5;
-        ctx.beginPath(); ctx.moveTo(0, -size);
-        for (let i = 0; i < 5; i++) {
-          ctx.lineTo(Math.cos(rot) * size, Math.sin(rot) * size); rot += step;
-          ctx.lineTo(Math.cos(rot) * (size / 2), Math.sin(rot) * (size / 2)); rot += step;
-        }
-        ctx.closePath(); ctx.fill();
-      } else if (settings.shape === "heart") {
-        const t = size * 0.6;
-        ctx.beginPath();
-        ctx.moveTo(0, t);
-        ctx.bezierCurveTo(0, t - size / 2, -size, t - size / 2, -size, 0);
-        ctx.bezierCurveTo(-size, -t / 2, 0, -t, 0, -t);
-        ctx.bezierCurveTo(0, -t, size, -t / 2, size, 0);
-        ctx.bezierCurveTo(size, t - size / 2, 0, t - size / 2, 0, t);
-        ctx.closePath(); ctx.fill();
-      } else if (settings.shape === "hex") {
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-          const ang = (Math.PI / 3) * i;
-          const px = Math.cos(ang) * size;
-          const py = Math.sin(ang) * size;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath(); ctx.fill();
-      } else if (settings.shape === "parallel") {
-        ctx.lineWidth = size * 0.25;
-        ctx.strokeStyle = settings.fgColor;
-        const w = size * 1.4;
-        for (let i = -1; i <= 1; i++) {
-          ctx.beginPath();
-          ctx.moveTo(i * w, -size * 1.2);
-          ctx.lineTo(i * w, size * 1.2);
-          ctx.stroke();
-        }
-      }
-      ctx.restore();
-    }
-
-    function render() {
-      const w = image.width, h = image.height;
-      if (!w || !h) return;
-      source.width = w; source.height = h;
-      canvas.width = w; canvas.height = h;
-      sctx.drawImage(image, 0, 0, w, h);
-      ctx.fillStyle = settings.bgColor;
-      ctx.fillRect(0, 0, w, h);
-
-      const cols = Math.ceil(w / settings.gridSize);
-      const rows = Math.ceil(h / settings.gridSize);
-      for (let i = 0; i < cols; i++) {
-        for (let j = 0; j < rows; j++) {
-          const x = i * settings.gridSize;
-          const y = j * settings.gridSize;
-          const cw = Math.min(settings.gridSize, w - x);
-          const ch = Math.min(settings.gridSize, h - y);
-          const data = sctx.getImageData(x, y, cw, ch).data;
-          let total = 0;
-          for (let k = 0; k < data.length; k += 4) total += (data[k] + data[k+1] + data[k+2]) / 3;
-          let avg = total / (data.length / 4);
-          let adjusted = Math.pow(avg / 255, 1 / settings.contrast) * 255;
-          if (settings.invert) adjusted = 255 - adjusted;
-          const maxSize = Math.min(cw, ch) / 2;
-          let size = settings.uniformSize ? (adjusted > 128 ? maxSize : 0) : ((255 - adjusted) / 255) * maxSize;
-          size *= (1 + settings.overlap);
-          if (size > 0) drawShape(x + cw / 2, y + ch / 2, size);
-        }
-      }
-    }
-
-    image.onload = render;
-  </script>
-</body>
-</html>`;
-
-    const blob = new Blob([snippet], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'reticulations-snippet.html';
-    link.click();
-    URL.revokeObjectURL(url);
-    setStatus('success', 'Snippet downloaded');
-  };
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
       <aside className="w-full md:w-[380px] border-r border-border bg-card/50 backdrop-blur-xl h-full flex flex-col md:h-screen z-10 overflow-y-auto custom-scrollbar">
@@ -749,7 +611,7 @@ export default function Page() {
                   <span className="text-xs text-muted-foreground">{(settings.sensitivity ?? 1).toFixed(1)}x</span>
                 </div>
                 <Slider
-                  id="sensitivity" min={0.5} max={2} step={0.1} value={[settings.sensitivity ?? 1]}
+                  id="sensitivity" min={0.1} max={5} step={0.1} value={[settings.sensitivity ?? 1]}
                   onValueChange={([val]) => setSettings(s => ({ ...s, sensitivity: val }))}
                 />
               </div>
@@ -794,7 +656,11 @@ export default function Page() {
                       <path d="M12 2.5l2.9 6.04 6.66.97-4.82 4.7 1.14 6.64L12 17.77 6.12 20.85l1.14-6.64-4.82-4.7 6.66-.97L12 2.5z" />
                     </svg>
                   )}
-                  {shapeKey === 'heart' && <div className="text-[10px]">♥</div>}
+                  {shapeKey === 'heart' && (
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden="true">
+                      <path d="M12 21s-6.7-4.35-9.2-7.7C1 11.2 1.2 7.8 3.5 6c1.8-1.4 4.4-1.2 6 0.6L12 9l2.5-2.4c1.6-1.8 4.2-2 6-0.6 2.3 1.8 2.5 5.2 0.7 7.3C18.7 16.7 12 21 12 21z" />
+                    </svg>
+                  )}
                   {shapeKey === 'hex' && <div className="w-3 h-3 bg-current [clip-path:polygon(25%_0%,_75%_0%,_100%_50%,_75%_100%,_25%_100%,_0%_50%)]" />}
                   {shapeKey === 'parallel' && <div className="text-xs">|||</div>}
                 </button>
@@ -937,57 +803,51 @@ export default function Page() {
                   : 'Export PNG Sequence'
               : 'Export Image'}
           </Button>
-          <Button
-            onClick={handleDownloadSnippet}
-            className="w-full"
-            size="lg"
-            variant="outline"
-            disabled={!imageSrc}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Download Snippet
-          </Button>
         </div>
       </aside>
 
       <main className="flex-1 bg-stone-900/50 relative flex items-center justify-center p-8 overflow-hidden bg-[radial-gradient(#2a2a2a_1px,transparent_1px)] [background-size:16px_16px]">
-      <canvas ref={sourceCanvasRef} className="hidden" />
-      <div className="relative shadow-2xl shadow-black/50 rounded-lg overflow-hidden border border-white/10 max-w-full max-h-full">
-        {mediaState !== 'ready' && (
-          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground z-10 bg-card/80 backdrop-blur-sm">
-            <div className="text-center px-6 py-10 w-full max-w-3xl">
-              <ImageIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              {mediaState === 'loading' && <p>Loading media...</p>}
-              {mediaState === 'error' && <p>Failed to load media. Try again.</p>}
-              {mediaState === 'idle' && <p>Upload an image or video to start</p>}
-            </div>
+        <canvas ref={sourceCanvasRef} className="hidden" />
+        <div className="flex flex-col items-center max-w-full">
+          <div className="relative shadow-2xl shadow-black/50 rounded-lg overflow-hidden border border-white/10 max-w-full max-h-full">
+            {mediaState !== 'ready' && (
+              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground z-10 bg-card/80 backdrop-blur-sm">
+                <div className="text-center px-6 py-10 w-full max-w-3xl">
+                  <ImageIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  {mediaState === 'loading' && <p>Loading media...</p>}
+                  {mediaState === 'error' && <p>Failed to load media. Try again.</p>}
+                  {mediaState === 'idle' && <p>Upload an image or video to start</p>}
+                </div>
+              </div>
+            )}
+            {isVideo && imageSrc ? (
+              <div className="relative w-full max-h-[85vh]">
+                <video
+                  ref={videoRef}
+                  className="hidden"
+                  crossOrigin="anonymous"
+                  loop
+                />
+                <canvas
+                  ref={targetCanvasRef}
+                  className="max-w-full max-h-[85vh] w-full object-contain block"
+                />
+              </div>
+            ) : (
+              <canvas
+                ref={targetCanvasRef}
+                className={`max-w-full max-h-[85vh] object-contain block ${isBgTransparent ? '' : 'bg-checkered'}`}
+                style={{ opacity: imageSrc ? 1 : 0.5, transition: 'opacity 0.3s ease' }}
+              />
+            )}
           </div>
-        )}
-        {isVideo && imageSrc ? (
-          <div className="relative w-full max-h-[85vh]">
-            <video
-              ref={videoRef}
-              className="hidden"
-              crossOrigin="anonymous"
-              loop
-            />
-            <canvas
-              ref={targetCanvasRef}
-              className="max-w-full max-h-[85vh] w-full object-contain block"
-            />
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-              <p className="text-xs text-white text-center">Video playing with live processing</p>
-            </div>
-          </div>
-        ) : (
-          <canvas
-            ref={targetCanvasRef}
-            className={`max-w-full max-h-[85vh] object-contain block ${isBgTransparent ? '' : 'bg-checkered'}`}
-            style={{ opacity: imageSrc ? 1 : 0.5, transition: 'opacity 0.3s ease' }}
-          />
-        )}
-      </div>
-    </main>
+          {isVideo && imageSrc && (
+            <p className="mt-3 text-xs text-muted-foreground text-center">
+              Video loaded, start changing parameters to see the effect
+            </p>
+          )}
+        </div>
+      </main>
       {uploadStatus && (
         <div className="fixed bottom-4 right-4 z-50">
           <div

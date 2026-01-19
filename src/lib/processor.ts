@@ -11,6 +11,9 @@ export const SHAPES = {
   parallel: true,
 };
 
+const HEART_PATH_DATA = 'M12 21s-6.7-4.35-9.2-7.7C1 11.2 1.2 7.8 3.5 6c1.8-1.4 4.4-1.2 6 0.6L12 9l2.5-2.4c1.6-1.8 4.2-2 6-0.6 2.3 1.8 2.5 5.2 0.7 7.3C18.7 16.7 12 21 12 21z';
+let heartPath: Path2D | null = null;
+
 export interface ProcessorSettings {
   gridSize: number;
   contrast: number;
@@ -89,13 +92,6 @@ export function processImage(sourceCanvas: HTMLCanvasElement, targetCanvas: HTML
 
       let adjustedBrightness = Math.pow(avgBrightness / 255, 1 / settings.contrast) * 255;
 
-      // Blend edge detection with brightness for more dynamic feature adaptation
-      if (settings.edgeDetection && edgeStrength > 0) {
-        const sensitivity = settings.sensitivity ?? 1;
-        adjustedBrightness = adjustedBrightness * 0.7 + (edgeStrength * sensitivity) * 0.3;
-        adjustedBrightness = Math.min(255, adjustedBrightness);
-      }
-
       if (settings.invert) {
         adjustedBrightness = 255 - adjustedBrightness;
       }
@@ -105,6 +101,11 @@ export function processImage(sourceCanvas: HTMLCanvasElement, targetCanvas: HTML
         size = adjustedBrightness > 128 ? maxSize : 0;
       } else {
         size = ((255 - adjustedBrightness) / 255) * maxSize;
+      }
+      if (settings.edgeDetection && edgeStrength > 0) {
+        const sensitivity = settings.sensitivity ?? 1;
+        const edgeBoost = Math.min(1, (edgeStrength * sensitivity) / 40);
+        size *= 1 + edgeBoost * 0.6;
       }
       size *= (1 + settings.overlap);
       if (size < 0) size = 0;
@@ -188,6 +189,20 @@ function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, spikes:
 }
 
 function drawHeart(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
+  if (!heartPath && typeof Path2D !== 'undefined') {
+    heartPath = new Path2D(HEART_PATH_DATA);
+  }
+  if (heartPath) {
+    const scale = (2 * size) / 24;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.translate(-12, -12);
+    ctx.fill(heartPath);
+    ctx.restore();
+    return;
+  }
+
   const topCurveHeight = size * 0.6;
   ctx.beginPath();
   ctx.moveTo(cx, cy + topCurveHeight);
